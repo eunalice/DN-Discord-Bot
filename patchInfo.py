@@ -1,19 +1,22 @@
-import requests
+import aiohttp
+import asyncio
 from datetime import datetime
 import pytz
 
 def timeConvert(time_string):
-    dt = datetime.strptime(time_string, '%a, %d %b %Y %H:%M:%S %Z')
-    utc_time = pytz.utc.localize(dt)
+    date = datetime.strptime(time_string, '%a, %d %b %Y %H:%M:%S %Z')
+    utc_time = pytz.utc.localize(date)
     taipei_time = utc_time.astimezone(pytz.timezone('Asia/Taipei'))
     taipei_offset = taipei_time.strftime('%z')
     taipei_offset = f'UTC{taipei_offset[:3]}:{taipei_offset[3:]}'
     return taipei_time.strftime('%Y年%m月%d日 %H:%M:%S') 
 
-def timeSince(date_str):
-    date = datetime.strptime(date_str, "%Y年%m月%d日 %H:%M:%S")
-    now = datetime.now()
-    delta = now - date
+def timeSince(time_string):
+    date = datetime.strptime(time_string, '%a, %d %b %Y %H:%M:%S %Z')
+    date_unix  = date.timestamp()
+    now = datetime.utcnow()
+    now_unix  = now.timestamp()
+    delta = datetime.fromtimestamp(now_unix) - datetime.fromtimestamp(date_unix)
     if delta.days > 0:
         return f"{delta.days}天前"
     elif delta.seconds // 3600 > 0:
@@ -23,21 +26,30 @@ def timeSince(date_str):
     else:
         return "剛剛"
 
-def getVersion(url):
-    response = requests.get(url)
-    if response.status_code == 200:
-        content = response.content.decode('utf-8')
-        version_line = content.split('\n')[0]
-        version = version_line.split()[1]
-        lastModified_Convert = timeConvert(response.headers.get('Last-Modified'))
-        lastModified_Since = timeSince(lastModified_Convert);
-        last_modified = lastModified_Convert + "," + lastModified_Since         
-        return version, last_modified
-    else:
-        return None, None
+async def getVersion(session, url):
+    async with session.get(url) as response:
+        if response.status == 200:
+            content = await response.text(encoding='utf-8')
+            version_line = content.split('\n')[0]
+            version = version_line.split()[1]
+            lastModified_Original = response.headers.get('Last-Modified')
+            lastModified_Convert = timeConvert(lastModified_Original)
+            lastModified_Since = timeSince(lastModified_Original);
+            last_modified = lastModified_Convert + "," + lastModified_Since
+            return version, last_modified
+        else:
+            return None, None
 
-def getVersions(urls):
-    contents = {name: getVersion(url) for name, url in urls}
+async def getVersions(urls):
+    async with aiohttp.ClientSession() as session:
+        tasks = []
+        for name, url in urls:
+            task = asyncio.create_task(getVersion(session, url))
+            tasks.append((name, task))
+        contents = {}
+        for name, task in tasks:
+            content = await task
+            contents[name] = content
     return contents
 
 def printVersions(contents):
@@ -45,7 +57,7 @@ def printVersions(contents):
     for name, (content, last_modified) in contents.items():
         print(f"{name:4}：{content:>4} ({last_modified})")
 
-def getPatchInfo():
+async def getPatchInfo():
     urls = [
         ('KO', 'http://patchkr.dragonnest.com/Patch/PatchInfoServer.cfg'),
         ('CN', 'https://lzg.jijiagames.com/dn/patchinfo/Public/PatchInfoServer.cfg'), 
@@ -54,7 +66,7 @@ def getPatchInfo():
         ('SEA', 'https://patchsea.dragonnest.com/Game/DragonNest/Patch/PatchInfoServer.cfg'),
         ('CN_L', 'https://lzg.jijiagames.com/dn/patchinfo/Legacy/PatchInfoServer.cfg')
     ]
-    contents = getVersions(urls)
+    contents = await getVersions(urls)
     result = []
     for name, (content, last_modified) in contents.items():
         result.append(f"{name}: {content} ({last_modified})")
