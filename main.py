@@ -47,14 +47,15 @@ async def schedule_announcement():
 @bot.event
 async def on_ready():
   print("目前登入身份：", bot.user)
-  
+  for guild in bot.guilds:
+        print(f'Guild Name: {guild.name} Guild ID: {guild.id}')      
   try:
     synced = await bot.tree.sync()
     print(f'[on_ready()] Synced {len(synced)} commands.')
   except Exception as e:
     print(f'[on_ready()] Error syncing commands: {e}')
 
-  await schedule_announcement()
+  #await schedule_announcement()
 
 @bot.group()
 async def lz(ctx):
