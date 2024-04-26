@@ -19,8 +19,22 @@ prefix = "."
 intents = discord.Intents.all()
 bot = commands.Bot(command_prefix=prefix, intents=intents)
 
+async def schedule_announcement_loop():
+    while True:
+        await schedule_announcement()
+        await asyncio.sleep(14400)
+
 async def schedule_announcement():
     now = datetime.now(timezone(timedelta(hours=8)))
+    next_announcement_time = read_next_announcement_time()
+
+    if not check_next_announcement_time():
+        next_announcement_time = next_friday_six_pm()
+        write_next_announcement_time(next_announcement_time)
+
+    delay = (next_announcement_time - now).total_seconds()
+    if delay > 0:
+        await asyncio.sleep(delay)
 
     if check_next_announcement_time():
         announcement_channel = bot.get_channel(1197177232158888057)
@@ -28,21 +42,9 @@ async def schedule_announcement():
         await message.publish()
 
         next_announcement_time = next_friday_six_pm()
-
         write_next_announcement_time(next_announcement_time)
-        delay = (next_announcement_time - now).total_seconds()
-        await asyncio.sleep(delay)
 
-        if check_next_announcement_time():
-            await schedule_announcement()
-    else:
-        next_announcement_time = read_next_announcement_time()
-        delay = (next_announcement_time - now).total_seconds()
-        await asyncio.sleep(delay)
-
-        if check_next_announcement_time():
-            await schedule_announcement()
-
+    await schedule_announcement()
 
 @bot.event
 async def on_ready():
@@ -55,7 +57,7 @@ async def on_ready():
   except Exception as e:
     print(f'[on_ready()] Error syncing commands: {e}')
 
-  #await schedule_announcement()
+  asyncio.create_task(schedule_announcement_loop())
 
 @bot.group()
 async def lz(ctx):
