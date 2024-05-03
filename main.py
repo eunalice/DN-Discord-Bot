@@ -21,8 +21,8 @@ bot = commands.Bot(command_prefix=prefix, intents=intents)
 
 async def schedule_announcement_loop():
     while True:
-        await schedule_announcement()
-        await asyncio.sleep(14400)
+        delay = await schedule_announcement()
+        await asyncio.sleep(delay)
 
 async def schedule_announcement():
     now = datetime.now(timezone(timedelta(hours=8)))
@@ -33,18 +33,16 @@ async def schedule_announcement():
         write_next_announcement_time(next_announcement_time)
 
     delay = (next_announcement_time - now).total_seconds()
-    if delay > 0:
-        await asyncio.sleep(delay)
-
-    if check_next_announcement_time():
+    if delay <= 0:
         announcement_channel = bot.get_channel(1197177232158888057)
         message = await announcement_channel.send(content=getLuckyzoneWeek(1))
         await message.publish()
 
         next_announcement_time = next_friday_six_pm()
         write_next_announcement_time(next_announcement_time)
+        delay = (next_announcement_time - now).total_seconds()
 
-    await schedule_announcement()
+    return delay
 
 @bot.event
 async def on_ready():
